@@ -1,0 +1,280 @@
+import time
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
+from sklearn.model_selection import cross_val_score
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
+from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import RandomizedSearchCV
+from scipy import stats
+from scipy.stats import randint
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import SGDClassifier
+import matplotlib.pyplot as plt
+from sklearn.model_selection import cross_val_predict
+from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.metrics import roc_auc_score
+
+
+start_time = time.time()
+
+########## SETUP ##########
+###########################
+def display_scores(scores, model):
+    print("""
+    """, model, "Mean:", scores.mean(), """
+    """,
+    model, "Standard deviation:", scores.std(), """
+    """)
+    #print(model, " Scores:", scores)
+
+# Make the data run the same every time it's run 
+np.random.seed(42)
+
+########## Load Data ##########
+###############################
+def load_train_data():
+    return pd.read_csv('/Users/richard/Documents/Python/Machine-Learning/titanic/train.csv')
+train_data = load_train_data()
+
+def load_test_data():
+    return pd.read_csv('/Users/richard/Documents/Python/Machine-Learning/titanic/test.csv')
+test_data = load_test_data()
+
+########## Analyse Data ##########
+##################################
+print("""
+Original train_data
+""", train_data.info(), """
+""", train_data.describe()) # Print a summary of the data
+
+# Results: Age, Cabin and Embarked all have NULLs. 
+# PassengerID - arbiatry - drop
+# Survived - focus - include
+# PassengerClass - important - include
+# Name - unimportant - drop
+# Sex - important - include
+# Age - 20% missing. Possibly take mean, mode or median - important - include
+# Siblings or Spouses aboard - possibly important. include
+# Parents or Children aboard - possibly important. include
+# Ticket - unlikely important. drop
+# Fare - possibly important. include
+# Cabin - 77% missing so drop.
+# Embarked - 99.7% present. Negligable importance but include. fill null with median.
+
+########## Calibrate Train Data ##########
+##########################################
+# Drop irrelavant columns
+prepared_train_data = train_data.drop(['PassengerId', 'Name', 'Ticket', 'Cabin'], axis=1)
+
+# Convert alpha to numerical 
+prepared_train_data['Sex'].replace('male', 0, inplace=True)
+prepared_train_data['Sex'].replace('female', 1, inplace=True)
+prepared_train_data['Embarked'].replace('S', 1, inplace=True)
+prepared_train_data['Embarked'].replace('C', 2, inplace=True)
+prepared_train_data['Embarked'].replace('Q', 3, inplace=True)
+
+# Fill in the NULLs in Age and Embarked
+age_median = prepared_train_data["Age"].median()
+prepared_train_data["Age"].fillna(age_median, inplace=True)
+
+embarked_median = prepared_train_data["Embarked"].median()
+prepared_train_data["Embarked"].fillna(embarked_median, inplace=True)
+
+fare_median = prepared_train_data["Fare"].median()
+
+print("""
+Prepared train_data
+""", prepared_train_data.info())
+
+# Create new categories
+prepared_train_data["lone_travellor"] = prepared_train_data["SibSp"] + prepared_train_data["Parch"]
+
+#prepared_train_data["age_cat"] = pd.cut(prepared_train_data["Age"],
+#                                        bins=[0, 10, 20, 30, 40, 50, 60, 70, 80, np.inf],
+#                                        labels=[0, 1, 2, 3, 4, 5, 6, 7, 8])
+
+print("""
+""", prepared_train_data.head())
+
+########## Calibrate Test Data ##########
+#########################################
+print("""
+Test Data
+""", test_data.info())
+# Drop irrelavant columns
+prepared_test_data = test_data.drop(['PassengerId', 'Name', 'Ticket', 'Cabin'], axis=1)
+
+# Convert alpha to numerical 
+prepared_test_data['Sex'].replace('male', 0, inplace=True)
+prepared_test_data['Sex'].replace('female', 1, inplace=True)
+prepared_test_data['Embarked'].replace('S', 1, inplace=True)
+prepared_test_data['Embarked'].replace('C', 2, inplace=True)
+prepared_test_data['Embarked'].replace('Q', 3, inplace=True)
+
+
+# Fill in the NULLs in Age and Embarked
+prepared_test_data["Age"].fillna(age_median, inplace=True)
+prepared_test_data["Embarked"].fillna(embarked_median, inplace=True)
+
+# Fill the NULL fare
+
+prepared_test_data["Fare"].fillna(fare_median, inplace=True)
+
+# Create new categories
+prepared_test_data["lone_travellor"] = prepared_test_data["SibSp"] + prepared_test_data["Parch"]
+
+#prepared_test_data["age_cat"] = pd.cut(prepared_test_data["Age"],
+#                                        bins=[0, 10, 20, 30, 40, 50, 60, 70, 80, np.inf],
+#                                        labels=[0, 1, 2, 3, 4, 5, 6, 7, 8])
+
+print("""
+Prepared train_data
+""", prepared_test_data.info())
+
+########## Evaluate Data ##########
+###################################
+corr_matrix = prepared_train_data.corr()
+print("""
+
+Correlatation Matrix
+""", corr_matrix["Survived"].sort_values(ascending=False))
+# The correlation matrix suggests the Sex and Class of a passenger are the most important when evaluating survival.
+# As Sex and Pclass goes up, Survived goes down (died)
+
+########## Split the train_data##########
+#########################################
+split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+for train_index, test_index in split.split(prepared_train_data, prepared_train_data["Sex"]):
+    strat_train_set = prepared_train_data.loc[train_index]
+    strat_test_set = prepared_train_data.loc[test_index]
+
+# Separate predictor and labels from strat_train_set
+strat_train_set_predictors = strat_train_set.drop("Survived", axis=1)
+strat_train_set_labels = strat_train_set["Survived"].copy()
+
+########## Test prospective regression algorithms ##########
+############################################################
+
+########## Linear Regression ##########
+#lin_reg = LinearRegression()
+#lin_scores = cross_val_score(lin_reg, strat_train_set_predictors, strat_train_set_labels,
+#                             scoring="neg_mean_squared_error", cv=10)
+#lin_rmse_scores = np.sqrt(-lin_scores)
+#
+## Print results
+#display_scores(lin_rmse_scores, "LR")
+
+########### Decision Tree Regressor ##########
+#tree_reg = DecisionTreeRegressor(random_state=42)
+#scores = cross_val_score(tree_reg, strat_train_set_predictors, strat_train_set_labels,
+#                         scoring="neg_mean_squared_error", cv=10)
+#tree_rmse_scores = np.sqrt(-scores)
+#
+#Print results
+#display_scores(tree_rmse_scores, "DTR")
+
+########### Random Forest Regressor ##########
+#forest_reg = RandomForestRegressor(n_estimators=180, random_state=42)
+#scores = cross_val_score(forest_reg, strat_train_set_predictors, strat_train_set_labels,
+#                         scoring="neg_mean_squared_error", cv=10)
+#forest_rmse_scores = np.sqrt(-scores)
+#
+# Print results
+#display_scores(forest_rmse_scores, "RFR")
+
+########### Support Vector Machine Regression ##########
+#svm_reg = SVR(kernel="linear")
+#scores = cross_val_score(svm_reg, strat_train_set_predictors, strat_train_set_labels,
+#                         scoring="neg_mean_squared_error", cv=10)
+#svm_rmse_scores = np.sqrt(-scores)
+#
+## Print results
+#display_scores(svm_rmse_scores, "SVR")
+
+########## Test prospective classification algorithms ##########
+################################################################
+
+########## Stochastic Gradient Descent ##########
+#################################################
+#sgd_clf = SGDClassifier(random_state=42)
+#scores = cross_val_predict(sgd_clf, strat_train_set_predictors, strat_train_set_labels, cv=3)
+#
+#print("""
+#    SGD Precision: """, precision_score(strat_train_set_labels, scores))
+#print("   SGD Recall: ", recall_score(strat_train_set_labels, scores))
+#print("   SGD f1: ", f1_score(strat_train_set_labels, scores))
+#print("   SGD ROC_AUC: ", roc_auc_score(strat_train_set_labels, scores))
+
+########## Support Vector Machine Classification ##########
+#svm_clf = SVC()
+#scores = cross_val_predict(svm_clf, strat_train_set_predictors, strat_train_set_labels, cv=10)
+#
+#print("""
+#    SVC Precision: """, precision_score(strat_train_set_labels, scores))
+#print("   SVC Recall: ", recall_score(strat_train_set_labels, scores))
+#print("   SVC f1: ", f1_score(strat_train_set_labels, scores))
+#print("   SVC ROC_AUC: ", roc_auc_score(strat_train_set_labels, scores))
+
+########## Random Forest Classification ##########
+#forest_clf = RandomForestClassifier(random_state=42)
+#scores = cross_val_predict(forest_clf, strat_train_set_predictors, strat_train_set_labels, cv=10)
+#
+#print("""
+#    RFR Precision: """, precision_score(strat_train_set_labels, scores))
+#print("   RFR Recall: ", recall_score(strat_train_set_labels, scores))
+#print("   RFR f1: ", f1_score(strat_train_set_labels, scores))
+#print("   RFR ROC_AUC: ", roc_auc_score(strat_train_set_labels, scores))
+
+########## FINAL MODEL ##########
+#################################
+# Separate predictor and labels from prepared_train_data
+train_data_predictors = prepared_train_data.drop("Survived", axis=1)
+train_data_labels = prepared_train_data["Survived"].copy()
+
+# Fine Tune using GridSearch 
+forest_clf = RandomForestClassifier(random_state=42)
+param_grid = [{'n_estimators': [10, 30, 60, 100, 150], 'max_features': [1, 2, 4, 6]},]
+grid_search = GridSearchCV(forest_clf, param_grid, cv=5)
+grid_search.fit(train_data_predictors, train_data_labels)
+final_model = grid_search.best_estimator_
+
+# Evaluate the final model on the test set 
+X_test = strat_test_set.drop("Survived", axis=1)
+y_test = strat_test_set["Survived"].copy()
+
+predictions = final_model.predict(X_test)
+
+print("""
+    Final Model Precision: """, precision_score(y_test, predictions))
+print("   Final Model Recall: ", recall_score(y_test, predictions))
+print("   Final Model f1: ", f1_score(y_test, predictions))
+print("   Final Model ROC_AUC: ", roc_auc_score(y_test, predictions))
+
+#############################################################
+########## Use the final model to predict Survived ##########
+#############################################################
+survived_prediction = final_model.predict(prepared_test_data) # Perform the prediction
+print("Prediction = ", survived_prediction ) # Print the prediction
+
+df = pd.DataFrame(survived_prediction)
+df.to_csv('file.csv') 
+
+print ("My program took", time.time() - start_time, "to run")
+
+
+
+
+
+
+
+
+
+
+

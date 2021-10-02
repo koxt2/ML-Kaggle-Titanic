@@ -1,33 +1,14 @@
 import time
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error
-from sklearn.metrics import mean_absolute_error
-from sklearn.model_selection import cross_val_score
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.svm import SVR
 from sklearn.model_selection import GridSearchCV
-from sklearn.model_selection import RandomizedSearchCV
-from scipy import stats
-from scipy.stats import randint
-from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import SGDClassifier
-import matplotlib.pyplot as plt
-
+from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score
 
 start_time = time.time()
 
 ########## SETUP ##########
 ###########################
-def display_scores(scores, model):
-    print(model, " Mean:", scores.mean())
-    print(model, " Standard deviation:", scores.std())
-    print(model, " Scores:", scores)
-
 # Make the data run the same every time it's run 
 np.random.seed(42)
 
@@ -41,39 +22,8 @@ def load_test_data():
     return pd.read_csv('/Users/richard/Documents/Python/Machine-Learning/titanic/test.csv')
 test_data = load_test_data()
 
-
-
-#####################################
-########## Build Algorithm ##########
-#####################################
-
-
-
-########## Analyse Data ##########
-##################################
-print("""
-Original train_data
-""", train_data.info(), """
-""", train_data.describe()) # Print a summary of the data
-
-
-
-# Results: Age, Cabin and Embarked all have NULLs. 
-# PassengerID - arbiatry - drop
-# Survived - focus - include
-# PassengerClass - important - include
-# Name - unimportant - drop
-# Sex - important - include
-# Age - 20% missing. Possibly take mean, mode or median - important - include
-# Siblings or Spouses aboard - possibly important. include
-# Parents or Children aboard - possibly important. include
-# Ticket - unlikely important. drop
-# Fare - possibly important. include
-# Cabin - 77% missing so drop.
-# Embarked - 99.7% present. Negligable importance but include. fill null with median.
-
-########## Calibrate Data ##########
-####################################
+########## Calibrate Train Data ##########
+##########################################
 # Drop irrelavant columns
 prepared_train_data = train_data.drop(['PassengerId', 'Name', 'Ticket', 'Cabin'], axis=1)
 
@@ -84,295 +34,20 @@ prepared_train_data['Embarked'].replace('S', 1, inplace=True)
 prepared_train_data['Embarked'].replace('C', 2, inplace=True)
 prepared_train_data['Embarked'].replace('Q', 3, inplace=True)
 
-# Fill in the NULLs in Age and Embarked
+# Calculate averages for missing data
 age_median = prepared_train_data["Age"].median()
-prepared_train_data["Age"].fillna(age_median, inplace=True)
-
 embarked_median = prepared_train_data["Embarked"].median()
+fare_median = prepared_train_data["Fare"].median()
+
+# Fill in the NULLs
+prepared_train_data["Age"].fillna(age_median, inplace=True)
 prepared_train_data["Embarked"].fillna(embarked_median, inplace=True)
 
-print("""
-Prepared train_data
-""", prepared_train_data.info())
-
 # Create new categories
-#prepared_train_data["lone_travellor"] = prepared_train_data["SibSp"] + prepared_train_data["Parch"]
+prepared_train_data["lone_travellor"] = prepared_train_data["SibSp"] + prepared_train_data["Parch"]
 
-#prepared_train_data["age_cat"] = pd.cut(prepared_train_data["Age"],
-#                                        bins=[0, 10, 20, 30, 40, 50, 60, 70, 80, np.inf],
-#                                        labels=[0, 1, 2, 3, 4, 5, 6, 7, 8])
-
-print("""
-Prepared train_data
-""", prepared_train_data.info())
-
-#prepared_train_data.hist(bins=50, figsize=(20,15))
-#plt.show()
-
-########## Evaluate Data ##########
-###################################
-corr_matrix = prepared_train_data.corr()
-print("""
-
-Correlatation Matrix
-""", corr_matrix["Survived"].sort_values(ascending=False))
-# The correlation matrix suggests the Sex and Class of a passenger are the most important when evaluating survival.
-# As Sex and Pclass goes up, Survived goes down (died)
-
-########## Split the train_data ##########
-##########################################
-split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-for train_index, test_index in split.split(prepared_train_data, prepared_train_data["Sex"]):
-    strat_train_set = prepared_train_data.loc[train_index]
-    strat_test_set = prepared_train_data.loc[test_index]
-
-# Check proportions
-#print("""
-
-#Proportions of train_data (Sex)
-#""", prepared_train_data["Sex"].value_counts() / len(prepared_train_data), """
-
-#Proportions of stratified train_data (Sex)
-#""", strat_train_set["Sex"].value_counts() / len(strat_train_set))
-
-# Separate predictor and labels from strat_train_set
-strat_train_set_predictors = strat_train_set.drop("Survived", axis=1)
-strat_train_set_labels = strat_train_set["Survived"].copy()
-
-########## Test prospective regression algorithms ##########
-############################################################
-
-########## Linear Regression ##########
-#lin_reg = LinearRegression()
-#lin_reg.fit(strat_train_set_predictors, strat_train_set_labels)
-#predictions = lin_reg.predict(strat_train_set_predictors)
-
-# Root Mean Square Error
-#lin_mse = mean_squared_error(strat_train_set_labels, predictions)
-#lin_rmse = np.sqrt(lin_mse)
-
-# Mean Absolute Error
-#lin_mae = mean_absolute_error(strat_train_set_labels, predictions)
-
-# Use cross validation to further evaluate the model
-#lin_scores = cross_val_score(lin_reg, strat_train_set_predictors, strat_train_set_labels,
-#                             scoring="neg_mean_squared_error", cv=10)
-#lin_rmse_scores = np.sqrt(-lin_scores)
-
-# Print results
-#print("""
-#Lin_Reg RMSE: """, lin_rmse, """
-#Lin Reg MAE: """, lin_mae)
-#display_scores(lin_rmse_scores, "Lin_Reg")
-
-########## Decision Tree Regressor ##########
-#tree_reg = DecisionTreeRegressor(random_state=42)
-#tree_reg.fit(strat_train_set_predictors, strat_train_set_labels)
-#predictions = tree_reg.predict(strat_train_set_predictors)
-
-# Root Mean Square Error
-#tree_mse = mean_squared_error(strat_train_set_labels, predictions)
-#tree_rmse = np.sqrt(tree_mse)
-
-# Use cross validation to further evaluate the model
-#scores = cross_val_score(tree_reg, strat_train_set_predictors, strat_train_set_labels,
-#                         scoring="neg_mean_squared_error", cv=10)
-#tree_rmse_scores = np.sqrt(-scores)
-
-#Print results
-#print("""
-#DTR RMSE""", tree_rmse)
-#display_scores(tree_rmse_scores, "DTR")
-
-########## Random Forest Regressor ##########
-#forest_reg = RandomForestRegressor(n_estimators=180, random_state=42)
-#forest_reg.fit(strat_train_set_predictors, strat_train_set_labels)
-#predictions = forest_reg.predict(strat_train_set_predictors)
-
-# Run random forest regressor
-#forest_mse = mean_squared_error(strat_train_set_labels, predictions)
-#forest_rmse = np.sqrt(forest_mse)
-
-# Use cross validation to further evaluate the model
-#scores = cross_val_score(forest_reg, strat_train_set_predictors, strat_train_set_labels,
-#                         scoring="neg_mean_squared_error", cv=10)
-#forest_rmse_scores = np.sqrt(-scores)
-#print("RIK: ", scores.mean())
-
-# Print results
-#print("""
-#RFR RMSE""", forest_rmse)
-#display_scores(forest_rmse_scores, "RFR")
-
-########## Support Vector Machine Regression ##########
-#svm_reg = SVR(kernel="linear")
-#svm_reg.fit(strat_train_set_predictors, strat_train_set_labels)
-#predictions = svm_reg.predict(strat_train_set_predictors)
-
-# Root Mean Square Error
-#svm_mse = mean_squared_error(strat_train_set_labels, predictions)
-#svm_rmse = np.sqrt(svm_mse)
-
-# Use cross validation to further evaluate the model
-#scores = cross_val_score(svm_reg, strat_train_set_predictors, strat_train_set_labels,
-#                         scoring="neg_mean_squared_error", cv=10)
-#svm_rmse_scores = np.sqrt(-scores)
-
-# Print results
-#print("""
-#SVR RMSE""", svm_rmse)
-#display_scores(svm_rmse_scores, "SVR")
-
-########## Fine Tune Random Forest Regressor using GridSearch ##########
-#param_grid = [
-#    # try 12 (3×4) combinations of hyperparameters
-#    {'n_estimators': [3, 10, 30, 60], 'max_features': [1, 2, 4, 6]},
-#    # then try 6 (2×3) combinations with bootstrap set as False
-#    {'bootstrap': [False], 'n_estimators': [3, 10, 30], 'max_features': [1, 2, 3, 4, 8]},
-#  ]
-
-#forest_reg = RandomForestRegressor(random_state=42)
-## train across 5 folds, that's a total of (12+6)*5=90 rounds of training 
-#grid_search = GridSearchCV(forest_reg, param_grid, cv=5,
-#                           scoring='neg_mean_squared_error',
-#                           return_train_score=True)
-#grid_search.fit(strat_train_set_predictors, strat_train_set_labels)
-
-# Print the results
-#print("""
-#GridSearch Results: """, grid_search.best_estimator_)
-
-#cvres = grid_search.cv_results_
-#for mean_score, params in zip(cvres["mean_test_score"], cvres["params"]):
-#    print(np.sqrt(-mean_score), params)
-
-# Result max_features = 2, n_estimators = 60
-
-########## Fine tune Random Forest Regressor using Randomised Search ##########
-#param_distribs = {
-#        'n_estimators': randint(low=1, high=200),
-#        'max_features': randint(low=1, high=8),
-#    }
-
-#forest_reg = RandomForestRegressor(random_state=42)
-#rnd_search = RandomizedSearchCV(forest_reg, param_distributions=param_distribs,
-#                                n_iter=10, cv=5, scoring='neg_mean_squared_error', random_state=42)
-#rnd_search.fit(strat_train_set_predictors, strat_train_set_labels)
-
-## Print the results
-#print("""
-#RandomisedSearch Results: """, rnd_search.best_estimator_)
-
-#cvres = rnd_search.cv_results_
-#for mean_score, params in zip(cvres["mean_test_score"], cvres["params"]):
-#    print(np.sqrt(-mean_score), params)
-
-########## Test prospective classification algorithms ##########
-################################################################
-
-########## Support Vector Machine Classification ##########
-#svm_clf = SVC()
-#svm_clf.fit(strat_train_set_predictors, strat_train_set_labels)
-#predictions = svm_clf.predict(strat_train_set_predictors)
-
-# Root Mean Square Error
-#svm_mse = mean_squared_error(strat_train_set_labels, predictions)
-#svm_rmse = np.sqrt(svm_mse)
-
-# Use cross validation to further evaluate the model
-#scores = cross_val_score(svm_clf, strat_train_set_predictors, strat_train_set_labels,
-#                         scoring="neg_mean_squared_error", cv=10)
-#svm_rmse_scores = np.sqrt(-scores)
-
-# Print results
-#print("""
-#SVC RMSE""", svm_rmse)
-#display_scores(svm_rmse_scores, "SVC")
-
-########## Random Forest Classification ##########
-#forest_clf = RandomForestClassifier(n_estimators=60, random_state=42)
-#forest_clf.fit(strat_train_set_predictors, strat_train_set_labels)
-#predictions = forest_clf.predict(strat_train_set_predictors)
-#
-## Run random forest regressor
-#forest_mse = mean_squared_error(strat_train_set_labels, predictions)
-#forest_rmse = np.sqrt(forest_mse)
-#
-## Use cross validation to further evaluate the model
-#scores = cross_val_score(forest_clf, strat_train_set_predictors, strat_train_set_labels,
-#                         scoring="neg_mean_squared_error", cv=10)
-#forest_rmse_scores = np.sqrt(-scores)
-#print("Cross Validation Mean: ", scores.mean())
-#
-## Print results
-#print("""
-#RFC RMSE""", forest_rmse)
-#display_scores(forest_rmse_scores, "RFC")
-
-########## Fine Tune Random Forest Classifier using GridSearch ##########
-param_grid = [
-    # try 12 (3×4) combinations of hyperparameters
-    {'n_estimators': [10, 30, 60, 100], 'max_features': [1, 2, 4, 6]},
-    # then try 6 (2×3) combinations with bootstrap set as False
-    {'bootstrap': [False], 'n_estimators': [10, 30, 60, 100], 'max_features': [1, 2, 3, 4, 6]},
-  ]
-
-forest_clf = RandomForestClassifier(random_state=42)
-# train across 5 folds, that's a total of (12+6)*5=90 rounds of training 
-grid_search = GridSearchCV(forest_clf, param_grid, cv=5,
-                           scoring='neg_mean_squared_error',
-                           return_train_score=True)
-grid_search.fit(strat_train_set_predictors, strat_train_set_labels)#
-
-# Print the results
-print("""
-GridSearch Results: """, grid_search.best_estimator_)
-
-cvres = grid_search.cv_results_
-for mean_score, params in zip(cvres["mean_test_score"], cvres["params"]):
-    print(np.sqrt(-mean_score), params)
-
-# Result max_features = 4, n_estimators = 60
-
-
-
-
-########## FINAL MODEL ##########
-#################################
-final_model = grid_search.best_estimator_
-
-# Evaluate the final model on the test set 
-X_test = strat_test_set.drop("Survived", axis=1)
-y_test = strat_test_set["Survived"].copy()
-
-final_predictions = final_model.predict(X_test)
-
-final_mse = mean_squared_error(y_test, final_predictions)
-final_rmse = np.sqrt(final_mse)
-
-print("""
-Final MSE: """, final_mse)
-print("Final RMSE: ", final_rmse)
-
-# Calculate the range of a result that has 95% confidence
-confidence = 0.95
-squared_errors = (final_predictions - y_test) ** 2
-print("95% Confidence Range: ", np.sqrt(stats.t.interval(confidence, len(squared_errors) - 1,
-                        loc=squared_errors.mean(),
-                        scale=stats.sem(squared_errors))))
-
-
-
-#############################################################
-########## Use the final model to predict Survived ##########
-#############################################################
-
-########## Analyse Data ##########
-##################################
-print(test_data.info())
-
-########## Calibrate Data ##########
-####################################
+########## Calibrate Test Data ##########
+#########################################
 # Drop irrelavant columns
 prepared_test_data = test_data.drop(['PassengerId', 'Name', 'Ticket', 'Cabin'], axis=1)
 
@@ -383,33 +58,45 @@ prepared_test_data['Embarked'].replace('S', 1, inplace=True)
 prepared_test_data['Embarked'].replace('C', 2, inplace=True)
 prepared_test_data['Embarked'].replace('Q', 3, inplace=True)
 
-# Fill in the NULLs in Age and Embarked
+# Fill in the NULLs 
 prepared_test_data["Age"].fillna(age_median, inplace=True)
 prepared_test_data["Embarked"].fillna(embarked_median, inplace=True)
-
-# Fill the NULL fare
-fare_median = prepared_train_data["Fare"].median()
 prepared_test_data["Fare"].fillna(fare_median, inplace=True)
 
 # Create new categories
-#prepared_test_data["lone_travellor"] = prepared_test_data["SibSp"] + prepared_test_data["Parch"]
+prepared_test_data["lone_travellor"] = prepared_test_data["SibSp"] + prepared_test_data["Parch"]
 
-#prepared_test_data["age_cat"] = pd.cut(prepared_test_data["Age"],
-#                                        bins=[0, 10, 20, 30, 40, 50, 60, 70, 80, np.inf],
-#                                        labels=[0, 1, 2, 3, 4, 5, 6, 7, 8])
+########## FINAL MODEL ##########
+#################################
+# Separate predictor and labels from prepared_train_data
+train_data_predictors = prepared_train_data.drop("Survived", axis=1)
+train_data_labels = prepared_train_data["Survived"].copy()
+
+# Fine Tune using GridSearch 
+forest_clf = RandomForestClassifier(random_state=42)
+param_grid = [{'n_estimators': [10, 30, 60, 100, 150], 'max_features': [1, 2, 4, 6]},]
+grid_search = GridSearchCV(forest_clf, param_grid, cv=5)
+grid_search.fit(train_data_predictors, train_data_labels)
+final_model = grid_search.best_estimator_
+
+predictions = final_model.predict(train_data_predictors)
 
 print("""
-Prepared train_data
-""", prepared_test_data.info())
+   Final Model Precision: """, precision_score(train_data_labels, predictions))
+print("   Final Model Recall: ", recall_score(train_data_labels, predictions))
+print("   Final Model f1: ", f1_score(train_data_labels, predictions))
+print("   Final Model ROC_AUC: ", roc_auc_score(train_data_labels, predictions))
 
-# Pass the test data into the model
+#############################################################
+########## Use the final model to predict Survived ##########
+#############################################################
 survived_prediction = final_model.predict(prepared_test_data) # Perform the prediction
-print("Prediction = ", survived_prediction ) # Print the prediction
 
-df = pd.DataFrame(survived_prediction)
-df.to_csv('file.csv') 
+survived_prediction = pd.DataFrame(survived_prediction)
+survived_prediction.to_csv('file.csv') 
 
-print ("My program took", time.time() - start_time, "to run")
+print ("""
+My program took""", time.time() - start_time, "to run")
 
 
 
