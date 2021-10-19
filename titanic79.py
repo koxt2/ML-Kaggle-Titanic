@@ -23,13 +23,8 @@ forest_clf = RandomForestClassifier(random_state=42)
 
 ########## Load Data ##########
 ###############################
-def load_train_data():
-    return pd.read_csv('/Users/richard/Documents/Python/Machine-Learning/titanic/train.csv')
-train_data = load_train_data()
-
-def load_test_data():
-    return pd.read_csv('/Users/richard/Documents/Python/Machine-Learning/titanic/test.csv')
-test_data = load_test_data()
+train_data = pd.read_csv('/Users/richard/Documents/Python/Machine-Learning/titanic/train.csv')
+test_data = pd.read_csv('/Users/richard/Documents/Python/Machine-Learning/titanic/test.csv')
 
 ########## Calibrate Train Data ##########
 ##########################################
@@ -41,8 +36,20 @@ train_data_labels = train_data["Survived"].copy()
 # Create new categories
 #train_data_predictors["family_size"] = train_data_predictors["SibSp"] + train_data_predictors["Parch"]
 
-# Drop irrelevant categories
-train_data_predictors = train_data_predictors.drop(["Name", "Ticket", "Cabin"], axis=1)
+train_data_predictors['Title'] = train_data_predictors['Name'] \
+        .str.extract(', ([A-Za-z]+)\.', expand=False)
+
+# Convert to categorical values Title 
+train_data_predictors["Title"] = train_data_predictors["Title"].replace(['Lady', 'the Countess',
+                                             'Capt', 'Col','Don', 'Dr', 
+                                             'Major', 'Rev', 'Sir', 'Jonkheer',
+                                             'Dona'], 'Rare')
+
+train_data_predictors["Title"] = train_data_predictors["Title"].map({"Master":0, "Miss":1, "Ms" : 1 ,
+                                         "Mme":1, "Mlle":1, "Mrs":1, "Mr":2, 
+                                         "Rare":3})
+
+#print(train_data_predictors)
 
 # Use SimpleImputer to fill missing data
 imputer.fit(train_data_predictors)
@@ -50,13 +57,14 @@ x = imputer.transform(train_data_predictors)
 train_data_predictors_transformed = pd.DataFrame(x, columns=train_data_predictors.columns, index=train_data_predictors.index)
 
 # Use OneHotEncoder to encode alpha data, and numerical with more than three possibilities
-train_data_predictors_encoded = pd.DataFrame(encoder.fit_transform(train_data_predictors_transformed[["Pclass", "Sex", "Embarked"]]))
+train_data_predictors_encoded = pd.DataFrame(encoder.fit_transform(train_data_predictors_transformed[["Pclass", "Sex", "Embarked", "Title"]]))
 train_data_predictors_transformed_encoded = train_data_predictors_transformed.join(train_data_predictors_encoded)
-train_data_predictors_transformed_encoded = train_data_predictors_transformed_encoded.drop(["Pclass", "Sex", "Embarked"], axis=1)
 
 # Create new categories
 train_data_predictors_transformed_encoded["family_size"] = train_data_predictors_transformed_encoded["SibSp"] + train_data_predictors_transformed_encoded["Parch"]
-train_data_predictors_transformed_encoded = train_data_predictors_transformed_encoded.drop(["SibSp", "Parch"], axis=1)
+
+# Drop irrelevant categories
+train_data_predictors_transformed_encoded = train_data_predictors_transformed_encoded.drop(["Pclass", "Sex", "Embarked", "Name", "Ticket", "Cabin", "SibSp", "Parch", "Title"], axis=1)
 
 # Scale the data
 prepared_train_data_predictors = scaler.fit_transform(train_data_predictors_transformed_encoded.astype(np.float64))
@@ -67,21 +75,34 @@ prepared_train_data_predictors = scaler.fit_transform(train_data_predictors_tran
 # Create new categories
 #test_data["family_size"] = test_data["SibSp"] + test_data["Parch"]
 
-# Drop irrelevant categories
-test_data = test_data.drop(["Name", "Ticket", "Cabin"], axis=1)
+# Convert to categorical values Title 
+test_data['Title'] = test_data['Name'] \
+        .str.extract(', ([A-Za-z]+)\.', expand=False)
+
+test_data["Title"] = test_data["Title"].replace(['Lady', 'the Countess',
+                                             'Capt', 'Col','Don', 'Dr', 
+                                             'Major', 'Rev', 'Sir', 'Jonkheer',
+                                             'Dona'], 'Rare')
+
+test_data["Title"] = test_data["Title"].map({"Master":0, "Miss":1, "Ms" : 1 ,
+                                         "Mme":1, "Mlle":1, "Mrs":1, "Mr":2, 
+                                         "Rare":3})
+
+#print(test_data)
 
 # Use SimpleImputer to fill missing data
 x = imputer.transform(test_data)
 test_data_transformed = pd.DataFrame(x, columns=test_data.columns, index=test_data.index)
 
 # Use OneHotEncoder to encode alpha data, and numerical with more than three possibilities
-test_data_encoded = pd.DataFrame(encoder.fit_transform(test_data_transformed[["Pclass", "Sex", "Embarked"]]))
+test_data_encoded = pd.DataFrame(encoder.fit_transform(test_data_transformed[["Pclass", "Sex", "Embarked", "Title"]]))
 test_data_transformed_encoded = test_data_transformed.join(test_data_encoded)
-test_data_transformed_encoded = test_data_transformed_encoded.drop(["Pclass", "Sex", "Embarked"], axis=1)
 
 # Create new categories
 test_data_transformed_encoded["family_size"] = test_data_transformed_encoded["SibSp"] + test_data_transformed_encoded["Parch"]
-test_data_transformed_encoded = test_data_transformed_encoded.drop(["SibSp", "Parch"], axis=1)
+
+# Drop irrelevant categories
+test_data_transformed_encoded = test_data_transformed_encoded.drop(["Pclass", "Sex", "Embarked", "Name", "Ticket", "Cabin", "SibSp", "Parch", "Title"], axis=1)
 
 # Scale the data
 prepared_test_data = scaler.fit_transform(test_data_transformed_encoded.astype(np.float64))
@@ -89,31 +110,30 @@ prepared_test_data = scaler.fit_transform(test_data_transformed_encoded.astype(n
 ########## FINAL MODEL ##########
 #################################
 # Fine Tune using GridSearch 
-param_grid = [{'n_estimators': [10, 30, 60], 'max_features': [1, 2, 4, 8, 14]},]
+param_grid = [{'n_estimators': [10, 30, 60, 100, 200], 'max_features': [1, 2, 4, 8, 10, 14]},]
 grid_search = GridSearchCV(forest_clf, param_grid, cv=3)
 grid_search.fit(prepared_train_data_predictors, train_data_labels)
 
 final_model = grid_search.best_estimator_
 
-#############################################################
+########## Display accuracy scores ##########
+#############################################
+print("""
+Grid Search - best parameters
+""", grid_search.best_params_)
+
+forest_scores = cross_val_score(forest_clf, prepared_train_data_predictors, train_data_labels, cv=10, scoring="accuracy")
+print("""
+Mean Cross Validation Score - Train Data
+""", forest_scores.mean())
+
 ########## Use the final model to predict Survived ##########
 #############################################################
 
 survived_prediction = final_model.predict(prepared_test_data) # Perform the prediction
 
-
-print("""
-Grid Search - best parameters
-""", grid_search.best_params_)
-
-print("""
-Cross Validation Score - Train Data
-""", cross_val_score(forest_clf, prepared_train_data_predictors, train_data_labels, cv=3, scoring="accuracy"))
-
-print("""
-Cross Validation Score - Test Data
-""", cross_val_score(forest_clf, prepared_test_data, survived_prediction, cv=3, scoring="accuracy"))
-
+########## Save results ##########
+##################################
 survived_prediction = pd.DataFrame(survived_prediction)
 survived_prediction.to_csv('file.csv') 
 
