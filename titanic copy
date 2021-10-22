@@ -26,21 +26,39 @@ forest_clf = RandomForestClassifier(random_state=42)
 train_data = pd.read_csv('/Users/richard/Documents/Python/Machine-Learning/titanic/train.csv')
 test_data = pd.read_csv('/Users/richard/Documents/Python/Machine-Learning/titanic/test.csv')
 
+########## Evaluate Data ##########
+###################################
+
+# View a sample of the data
+print("""
+Train Data Sample
+""", train_data.head())
+
+# View a summary of the data
+print("""
+Train Data Summary
+""", train_data.info())
+
+# View the averages of the numerical data
+print("""
+Train Data Summary
+""", train_data.describe())
+
 ########## Calibrate Train Data ##########
 ##########################################
-
 # Separate predictor and labels from prepared_train_data
 train_data_predictors = train_data.drop("Survived", axis=1)
 train_data_labels = train_data["Survived"]
 
 train_data_predictors = train_data_predictors.drop("Cabin", axis=1)
 
-# Create new categories
-#train_data_predictors["family_size"] = train_data_predictors["SibSp"] + train_data_predictors["Parch"]
-
 # Group together high class titles and map all titles to a number
 train_data_predictors['Title'] = train_data_predictors['Name'] \
         .str.extract(', ([A-Za-z]+)\.', expand=False)
+
+print("""
+Train data title value_count
+""", train_data_predictors["Title"].value_counts())
 
 train_data_predictors["Title"] = train_data_predictors["Title"].replace(['Lady', 'the Countess',
                                              'Capt', 'Col','Don', 'Dr', 
@@ -50,6 +68,10 @@ train_data_predictors["Title"] = train_data_predictors["Title"].replace(['Lady',
 train_data_predictors["Title"] = train_data_predictors["Title"].map({"Master":0, "Miss":1, "Ms" : 1 ,
                                           "Mlle":1, "Mme":1, "Mrs":1, "Mr":2, 
                                          "Rare":3})
+
+print("""
+Train Data
+""", train_data_predictors[train_data_predictors['Title'].isnull()])
 
 # Use SimpleImputer to fill missing data
 imputer.fit(train_data_predictors)
@@ -81,6 +103,10 @@ test_data = test_data.drop("Cabin", axis=1)
 test_data['Title'] = test_data['Name'] \
         .str.extract(', ([A-Za-z]+)\.', expand=False)
 
+print("""
+Train data title value_count
+""", test_data["Title"].value_counts())
+
 test_data["Title"] = test_data["Title"].replace(['Lady', 'the Countess',
                                              'Capt', 'Col','Don', 'Dr', 
                                              'Major', 'Rev', 'Sir', 'Jonkheer',
@@ -89,6 +115,12 @@ test_data["Title"] = test_data["Title"].replace(['Lady', 'the Countess',
 test_data["Title"] = test_data["Title"].map({"Master":0, "Miss":1, "Ms" : 1 ,
                                           "Mlle":1, "Mme":1, "Mrs":1, "Mr":2, 
                                          "Rare":3})
+
+
+
+print("""
+Test Data
+""", test_data[test_data['Title'].isnull()])
 
 # Use SimpleImputer to fill missing data
 x = imputer.transform(test_data)
