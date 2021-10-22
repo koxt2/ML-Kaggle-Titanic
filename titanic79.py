@@ -23,8 +23,8 @@ forest_clf = RandomForestClassifier(random_state=42)
 
 ########## Load Data ##########
 ###############################
-train_data = pd.read_csv('/Users/richard/Documents/Python/Machine-Learning/titanic/train.csv')
-test_data = pd.read_csv('/Users/richard/Documents/Python/Machine-Learning/titanic/test.csv')
+train_data = pd.read_csv('train.csv')
+test_data = pd.read_csv('test.csv')
 
 ########## Calibrate Train Data ##########
 ##########################################

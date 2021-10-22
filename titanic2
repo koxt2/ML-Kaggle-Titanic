@@ -16,15 +16,15 @@ start_time = time.time()
 # Make the data run the same every time it's run 
 np.random.seed(42)
 
-imputer = SimpleImputer(strategy="most_frequent")
+imputer = SimpleImputer(strategy="median")
 encoder = OneHotEncoder(sparse=False)
 scaler = StandardScaler()
 forest_clf = RandomForestClassifier(random_state=42)
 
 ########## Load Data ##########
 ###############################
-train_data = pd.read_csv('/Users/richard/Documents/Python/Machine-Learning/titanic/train.csv')
-test_data = pd.read_csv('/Users/richard/Documents/Python/Machine-Learning/titanic/test.csv')
+train_data = pd.read_csv('train.csv')
+test_data = pd.read_csv('test.csv')
 
 ########## Evaluate Data ##########
 ###################################
@@ -44,34 +44,73 @@ print("""
 Train Data Summary
 """, train_data.describe())
 
-########## Calibrate Train Data ##########
+########## Separate the Train Data ##########
+#############################################
+
+
+########## Clean the Train Data ##########
 ##########################################
+
+### Passenger Id
+
+### Survived
 # Separate predictor and labels from prepared_train_data
 train_data_predictors = train_data.drop("Survived", axis=1)
 train_data_labels = train_data["Survived"]
 
-train_data_predictors = train_data_predictors.drop("Cabin", axis=1)
+### Pclass
 
-# Group together high class titles and map all titles to a number
-train_data_predictors['Title'] = train_data_predictors['Name'] \
-        .str.extract(', ([A-Za-z]+)\.', expand=False)
+### Name
+for name_string in train_data_predictors['Name']:
+    train_data_predictors['Title'] = train_data_predictors['Name'].str.extract('([A-Za-z]+)\.', expand=True)
 
 print("""
 Train data title value_count
 """, train_data_predictors["Title"].value_counts())
 
-train_data_predictors["Title"] = train_data_predictors["Title"].replace(['Lady', 'the Countess',
-                                             'Capt', 'Col','Don', 'Dr', 
-                                             'Major', 'Rev', 'Sir', 'Jonkheer',
-                                             'Dona'], 'Rare')
+# Group together like titles
+title_mapping = {'Lady':'Rare', 'Countess':'Rare', 'Capt':'Rare',
+                'Col':'Rare', 'Don':'Rare', 'Dr':'Rare', 'Major':'Rare', 
+                'Rev':'Rare', 'Sir':'Rare', 'Jonkheer':'Rare', 'Dona':'Rare', 
+                'Countess':'Rare', 'Mme':'Mrs', 'Mlle':'Mrs'}
 
-train_data_predictors["Title"] = train_data_predictors["Title"].map({"Master":0, "Miss":1, "Ms" : 1 ,
-                                          "Mlle":1, "Mme":1, "Mrs":1, "Mr":2, 
-                                         "Rare":3})
+train_data_predictors.replace({'Title':title_mapping}, inplace=True)
+
+train_data_predictors["Title"] = train_data_predictors["Title"].map({"Master":0, "Miss":3, "Mr" : 2 ,"Mrs":3, "Rare":4,})
+
+train_data_predictors = train_data_predictors.drop("Name", axis=1)
 
 print("""
-Train Data
-""", train_data_predictors[train_data_predictors['Title'].isnull()])
+Train data title value_count
+""", train_data_predictors["Title"].value_counts())
+
+### Sex
+train_data_predictors['Sex'].replace('male', 0, inplace=True)
+train_data_predictors['Sex'].replace('female', 1, inplace=True)
+
+### Age
+
+### SibSp
+
+### Parch
+
+### Ticket
+train_data_predictors = train_data_predictors.drop("Ticket", axis=1)
+
+### Fare
+
+### Cabin
+train_data_predictors = train_data_predictors.drop("Cabin", axis=1)
+
+### Embarked
+train_data_predictors['Embarked'].replace('S', 0, inplace=True)
+train_data_predictors['Embarked'].replace('C', 1, inplace=True)
+train_data_predictors['Embarked'].replace('Q', 2, inplace=True)
+
+# View a sample of the data
+print("""
+Ammended Train Data Sample
+""", train_data_predictors.head())
 
 # Use SimpleImputer to fill missing data
 imputer.fit(train_data_predictors)
@@ -79,14 +118,14 @@ x = imputer.transform(train_data_predictors)
 train_data_predictors_transformed = pd.DataFrame(x, columns=train_data_predictors.columns, index=train_data_predictors.index)
 
 # Use OneHotEncoder to encode alpha data, and numerical with more than three possibilities
-train_data_predictors_encoded = pd.DataFrame(encoder.fit_transform(train_data_predictors_transformed[["Pclass", "Sex", "Embarked", "Title"]]))
+train_data_predictors_encoded = pd.DataFrame(encoder.fit_transform(train_data_predictors_transformed[["Pclass", "Embarked", "Title"]]))
 train_data_predictors_transformed_encoded = train_data_predictors_transformed.join(train_data_predictors_encoded)
 
 # Create new categories
 train_data_predictors_transformed_encoded["family_size"] = train_data_predictors_transformed_encoded["SibSp"] + train_data_predictors_transformed_encoded["Parch"]
 
 # Drop irrelevant categories
-train_data_predictors_transformed_encoded = train_data_predictors_transformed_encoded.drop(["Pclass", "Sex", "Embarked", "Name", "Ticket", "SibSp", "Parch", "Title"], axis=1)
+train_data_predictors_transformed_encoded = train_data_predictors_transformed_encoded.drop(["Pclass", "Embarked", "SibSp", "Parch", "Title"], axis=1)
 
 # Scale the data
 prepared_train_data_predictors = scaler.fit_transform(train_data_predictors_transformed_encoded.astype(np.float64))
@@ -94,47 +133,76 @@ prepared_train_data_predictors = scaler.fit_transform(train_data_predictors_tran
 ########## Calibrate Test Data ##########
 ##########################################
 
-# Create new categories
-#test_data["family_size"] = test_data["SibSp"] + test_data["Parch"]
+### Passenger Id
 
-test_data = test_data.drop("Cabin", axis=1)
+### Pclass
 
-# Group together high class titles and map all titles to a number
-test_data['Title'] = test_data['Name'] \
-        .str.extract(', ([A-Za-z]+)\.', expand=False)
+### Name
+for name_string in test_data['Name']:
+    test_data['Title'] = test_data['Name'].str.extract('([A-Za-z]+)\.', expand=True)
 
 print("""
 Train data title value_count
 """, test_data["Title"].value_counts())
 
-test_data["Title"] = test_data["Title"].replace(['Lady', 'the Countess',
-                                             'Capt', 'Col','Don', 'Dr', 
-                                             'Major', 'Rev', 'Sir', 'Jonkheer',
-                                             'Dona'], 'Rare')
+# Group together like titles
+title_mapping = {'Lady':'Rare', 'Countess':'Rare', 'Capt':'Rare',
+                'Col':'Rare', 'Don':'Rare', 'Dr':'Rare', 'Major':'Rare', 
+                'Rev':'Rare', 'Sir':'Rare', 'Jonkheer':'Rare', 'Dona':'Rare', 
+                'Countess':'Rare', 'Mme':'Mrs', 'Mlle':'Mrs'}
 
-test_data["Title"] = test_data["Title"].map({"Master":0, "Miss":1, "Ms" : 1 ,
-                                          "Mlle":1, "Mme":1, "Mrs":1, "Mr":2, 
-                                         "Rare":3})
+test_data.replace({'Title':title_mapping}, inplace=True)
 
+test_data["Title"] = test_data["Title"].map({"Master":0, "Miss":3, "Mr" : 2 ,"Mrs":3, "Rare":4,})
 
+test_data = test_data.drop("Name", axis=1)
 
 print("""
-Test Data
-""", test_data[test_data['Title'].isnull()])
+Train data title value_count
+""", test_data["Title"].value_counts())
+
+### Sex
+test_data['Sex'].replace('male', 0, inplace=True)
+test_data['Sex'].replace('female', 1, inplace=True)
+
+### Age
+
+### SibSp
+
+### Parch
+
+### Ticket
+test_data = test_data.drop("Ticket", axis=1)
+
+### Fare
+
+### Cabin
+test_data = test_data.drop("Cabin", axis=1)
+
+### Embarked
+test_data['Embarked'].replace('S', 0, inplace=True)
+test_data['Embarked'].replace('C', 1, inplace=True)
+test_data['Embarked'].replace('Q', 2, inplace=True)
+
+# View a sample of the data
+print("""
+Ammended Train Data Sample
+""", test_data.head())
 
 # Use SimpleImputer to fill missing data
+imputer.fit(test_data)
 x = imputer.transform(test_data)
 test_data_transformed = pd.DataFrame(x, columns=test_data.columns, index=test_data.index)
 
 # Use OneHotEncoder to encode alpha data, and numerical with more than three possibilities
-test_data_encoded = pd.DataFrame(encoder.fit_transform(test_data_transformed[["Pclass", "Sex", "Embarked", "Title"]]))
+test_data_encoded = pd.DataFrame(encoder.fit_transform(test_data_transformed[["Pclass", "Embarked", "Title"]]))
 test_data_transformed_encoded = test_data_transformed.join(test_data_encoded)
 
 # Create new categories
 test_data_transformed_encoded["family_size"] = test_data_transformed_encoded["SibSp"] + test_data_transformed_encoded["Parch"]
 
 # Drop irrelevant categories
-test_data_transformed_encoded = test_data_transformed_encoded.drop(["Pclass", "Sex", "Embarked", "Name", "Ticket", "SibSp", "Parch", "Title"], axis=1)
+test_data_transformed_encoded = test_data_transformed_encoded.drop(["Pclass", "Embarked", "SibSp", "Parch", "Title"], axis=1)
 
 # Scale the data
 prepared_test_data = scaler.fit_transform(test_data_transformed_encoded.astype(np.float64))
@@ -142,7 +210,8 @@ prepared_test_data = scaler.fit_transform(test_data_transformed_encoded.astype(n
 ########## FINAL MODEL ##########
 #################################
 # Fine Tune using GridSearch 
-param_grid = [{'n_estimators': [300, 400, 500, 600], 'max_features': [0, 1, 2, 4, 8, 10, 14]},]
+param_grid =    [{'n_estimators': [30, 60, 100, 200, 300, 400], 'max_features': [0, 1, 2, 4, 8, 10, 14]},
+                {'bootstrap': [False], 'n_estimators': [3, 10], 'max_features': [2, 3, 4]},]
 grid_search = GridSearchCV(forest_clf, param_grid, cv=4)
 grid_search.fit(prepared_train_data_predictors, train_data_labels)
 
